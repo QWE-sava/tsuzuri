@@ -38,10 +38,13 @@ def find_existing() -> str | None:
     which = shutil.which("llama-server")
     if which:
         candidates.append(which)
-    candidates += glob.glob(str(_default_install_root() / "**" / "llama-server*"), recursive=True)
+    # 既存のキャッシュを探す際も、フォルダを誤認しないようにファイル判定を入れるとより安全
+    for candidate in glob.glob(str(_default_install_root() / "**" / "llama-server*"), recursive=True):
+        if Path(candidate).is_file():
+            candidates.append(candidate)
     for candidate in candidates:
         path = Path(candidate)
-        if path.exists():
+        if path.exists() and path.is_file():
             return str(path)
     return None
 
@@ -72,7 +75,13 @@ def _extract_and_locate(zip_path: Path, root: Path) -> str | None:
     with zipfile.ZipFile(zip_path) as archive:
         archive.extractall(root)
     pattern = "llama-server.exe" if platform.system().lower() == "windows" else "llama-server"
-    hits = sorted(glob.glob(str(root / "**" / pattern), recursive=True))
+    
+    # 【修正】解凍時もフォルダを排除してファイルだけを確実に取得
+    hits = [
+        p for p in glob.glob(str(root / "**" / pattern), recursive=True)
+        if Path(p).is_file()
+    ]
+    hits = sorted(hits)
     if not hits:
         return None
     binary = Path(hits[-1])
@@ -108,7 +117,6 @@ def build_from_source(root: Path) -> str:
         subprocess.run(["git", "clone", "--depth", "1", REPO_URL, str(source_dir)], check=True)
     use_cuda = shutil.which("nvcc") is not None
     
-    # 環境変数から指定があれば最優先、なければ利用可能な全CPUコアをフルに使い切る
     env_jobs = os.environ.get("TSUZURI_BUILD_JOBS")
     if env_jobs and env_jobs.isdigit():
         jobs = int(env_jobs)
@@ -117,27 +125,31 @@ def build_from_source(root: Path) -> str:
         
     print(f"[setup] building llama.cpp (GGML_CUDA={'ON' if use_cuda else 'OFF'}, -j{jobs}) ...")
     
-    # CMakeの構成コマンド（余計なGPU世代のコンパイルをスキップするオプションを追加）
     subprocess.run(
         [
             "cmake", 
             "-S", str(source_dir), 
             "-B", str(source_dir / "build"), 
             f"-DGGML_CUDA={'ON' if use_cuda else 'OFF'}",
-            "-DGGML_CUDA_FORCE_ARCHS=sm_75",  # T4 GPU専用にビルドを絞り込んで圧倒的時短
-            "-DGGML_NATIVE=OFF"                # CPUの過剰な最適化を抑えてコンパイルを軽量化
+            "-DGGML_CUDA_FORCE_ARCHS=sm_75",  # T4 GPU専用にビルドを制限
+            "-DGGML_NATIVE=OFF"                # CPU最適化をマイルドにしてビルドを軽量化
         ],
         check=True,
     )
     
-    # ビルド実行コマンド
     subprocess.run(
         ["cmake", "--build", str(source_dir / "build"), "--config", "Release", "-j", str(jobs)],
         check=True,
     )
     
     pattern = "llama-server.exe" if platform.system().lower() == "windows" else "llama-server"
-    hits = sorted(glob.glob(str(source_dir / "build" / "**" / pattern), recursive=True))
+    
+    # 【修正】フォルダ（CMakeFiles/llama-server.dir）を完全に除外し、本物の実行ファイルだけを掴む
+    hits = [
+        p for p in glob.glob(str(source_dir / "build" / "**" / pattern), recursive=True)
+        if Path(p).is_file()
+    ]
+    hits = sorted(hits)
     if not hits:
         raise RuntimeError("ビルド完了後も llama-server が見つかりませんでした")
         
@@ -151,7 +163,6 @@ def build_from_source(root: Path) -> str:
             p.chmod(p.stat().st_mode | stat.S_IEXEC)
             
     return str(binary)
-
 
 
 def ensure_llama_bin(install_root: str | Path | None = None) -> str:
@@ -191,3 +202,4 @@ def ensure_llama_bin(install_root: str | Path | None = None) -> str:
 
 if __name__ == "__main__":
     print(ensure_llama_bin())
+
