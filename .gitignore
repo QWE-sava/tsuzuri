@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+saves/
+models/*.gguf
+*.log
+
+.ipynb_checkpoints/
+.env
+.pytest_cache/

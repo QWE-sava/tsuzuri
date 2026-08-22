@@ -1,0 +1,39 @@
+# TSUZURI 設定例
+
+model:
+  # 既存のOpenAI互換サーバーに接続する場合はこちら（llama_bin/model_pathより優先）
+  server_url: ""
+  llama_bin: ""
+  model_path: ""
+  repo_id: "unsloth/gemma-4-E4B-it-GGUF"
+  gguf_file: "gemma-4-E4B-it-Q4_K_M.gguf"
+  host: "127.0.0.1"
+  port: 8321
+  ctx_size: 8192
+  n_gpu_layers: 99
+  startup_timeout: 600
+
+gen:
+  temperature: 0.85
+  top_p: 0.95
+  max_tokens: 600
+  repeat_penalty: 1.05
+
+memory:
+  recent_window: 8        # 生のまま文脈に載せる直近メッセージ数
+  summarize_trigger: 14   # 未要約メッセージがこの数を超えたら要約圧縮
+  facts_enabled: true     # 長期記憶の事実抽出を有効化
+
+guard:
+  enabled: true           # 同期ガード（出力前ルール検査）
+  async_judge: true       # 非同期ガード（表示後LLM判定）
+  max_retry: 2            # 再生成上限
+  tension_threshold: 0.35 # この緊張度未満では不穏キーワードをブロック
+
+context:
+  token_budget: 6144      # プロンプトへ投入する概算トークン上限
+  chars_per_token: 1.5    # 日本語概算換算レート
+  max_facts_in_context: 10
+
+saves_dir: "saves"
+session_id: "default"
