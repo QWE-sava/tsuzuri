@@ -11,8 +11,8 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-RELEASE_API = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
-REPO_URL = "https://github.com/ggml-org/llama.cpp"
+RELEASE_API = "https://github.com"
+REPO_URL = "https://github.com"
 
 _ASSET_KEYWORDS = {
     "linux": "ubuntu",
@@ -38,10 +38,12 @@ def find_existing() -> str | None:
     which = shutil.which("llama-server")
     if which:
         candidates.append(which)
-    # 既存のキャッシュを探す際も、フォルダを誤認しないようにファイル判定を入れるとより安全
+    
+    # 既存のキャッシュを探す際も、フォルダを誤認しないようにファイル判定を徹底
     for candidate in glob.glob(str(_default_install_root() / "**" / "llama-server*"), recursive=True):
         if Path(candidate).is_file():
             candidates.append(candidate)
+            
     for candidate in candidates:
         path = Path(candidate)
         if path.exists() and path.is_file():
@@ -76,7 +78,7 @@ def _extract_and_locate(zip_path: Path, root: Path) -> str | None:
         archive.extractall(root)
     pattern = "llama-server.exe" if platform.system().lower() == "windows" else "llama-server"
     
-    # 【修正】解凍時もフォルダを排除してファイルだけを確実に取得
+    # 解凍時もフォルダを排除してファイルだけを確実に取得
     hits = [
         p for p in glob.glob(str(root / "**" / pattern), recursive=True)
         if Path(p).is_file()
@@ -123,16 +125,17 @@ def build_from_source(root: Path) -> str:
     else:
         jobs = os.cpu_count() or 2
         
-    print(f"[setup] building llama.cpp (GGML_CUDA={'ON' if use_cuda else 'OFF'}, -j{jobs}) ...")
+    print(f"[setup] building llama.cpp (GGML_CUDA={'ON' if use_cuda else 'OFF'}, -j{jobs}) via Ninja ...")
     
+    # CMakeの構成コマンド（Ninjaの採用、およびT4(75)以外の全アーキテクチャを力技で強制排除）
     subprocess.run(
         [
             "cmake", 
+            "-G", "Ninja", 
             "-S", str(source_dir), 
             "-B", str(source_dir / "build"), 
             f"-DGGML_CUDA={'ON' if use_cuda else 'OFF'}",
-            "-DGGML_CUDA_FORCE_ARCHS=sm_75",  # T4 GPU専用にビルドを制限
-            "-DGGML_NATIVE=OFF"                # CPU最適化をマイルドにしてビルドを軽量化
+            "-DCMAKE_CUDA_ARCHITECTURES=75"  # T4 GPU専用にビルドをピンポイント固定
         ],
         check=True,
     )
@@ -144,7 +147,7 @@ def build_from_source(root: Path) -> str:
     
     pattern = "llama-server.exe" if platform.system().lower() == "windows" else "llama-server"
     
-    # 【修正】フォルダ（CMakeFiles/llama-server.dir）を完全に除外し、本物の実行ファイルだけを掴む
+    # フォルダ（CMakeFiles/llama-server.dir）を完全に除外し、本物の実行ファイルだけを掴む
     hits = [
         p for p in glob.glob(str(source_dir / "build" / "**" / pattern), recursive=True)
         if Path(p).is_file()
@@ -202,4 +205,3 @@ def ensure_llama_bin(install_root: str | Path | None = None) -> str:
 
 if __name__ == "__main__":
     print(ensure_llama_bin())
-
