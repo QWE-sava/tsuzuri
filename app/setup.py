@@ -100,6 +100,7 @@ def install_from_release(root: Path) -> tuple[str, bool] | None:
         return None
     return binary, is_cuda
 
+
 def build_from_source(root: Path) -> str:
     source_dir = root / "llama.cpp"
     if not source_dir.exists():
@@ -107,7 +108,7 @@ def build_from_source(root: Path) -> str:
         subprocess.run(["git", "clone", "--depth", "1", REPO_URL, str(source_dir)], check=True)
     use_cuda = shutil.which("nvcc") is not None
     
-    # 【変更箇所】環境変数から指定があれば最優先、なければ利用可能な全CPUコアをフルに使い切る
+    # 環境変数から指定があれば最優先、なければ利用可能な全CPUコアをフルに使い切る
     env_jobs = os.environ.get("TSUZURI_BUILD_JOBS")
     if env_jobs and env_jobs.isdigit():
         jobs = int(env_jobs)
@@ -115,21 +116,40 @@ def build_from_source(root: Path) -> str:
         jobs = os.cpu_count() or 2
         
     print(f"[setup] building llama.cpp (GGML_CUDA={'ON' if use_cuda else 'OFF'}, -j{jobs}) ...")
+    
+    # CMakeの構成コマンド（余計なGPU世代のコンパイルをスキップするオプションを追加）
     subprocess.run(
-        ["cmake", "-S", str(source_dir), "-B", str(source_dir / "build"), f"-DGGML_CUDA={'ON' if use_cuda else 'OFF'}"],
+        [
+            "cmake", 
+            "-S", str(source_dir), 
+            "-B", str(source_dir / "build"), 
+            f"-DGGML_CUDA={'ON' if use_cuda else 'OFF'}",
+            "-DGGML_CUDA_FORCE_ARCHS=sm_75",  # T4 GPU専用にビルドを絞り込んで圧倒的時短
+            "-DGGML_NATIVE=OFF"                # CPUの過剰な最適化を抑えてコンパイルを軽量化
+        ],
         check=True,
     )
+    
+    # ビルド実行コマンド
     subprocess.run(
         ["cmake", "--build", str(source_dir / "build"), "--config", "Release", "-j", str(jobs)],
         check=True,
     )
+    
     pattern = "llama-server.exe" if platform.system().lower() == "windows" else "llama-server"
     hits = sorted(glob.glob(str(source_dir / "build" / "**" / pattern), recursive=True))
     if not hits:
         raise RuntimeError("ビルド完了後も llama-server が見つかりませんでした")
+        
     binary = Path(hits[-1])
     if platform.system().lower() != "windows":
         binary.chmod(binary.stat().st_mode | stat.S_IEXEC)
+        
+    for extra in glob.glob(str(binary.parent / "llama-*")):
+        p = Path(extra)
+        if p.is_file():
+            p.chmod(p.stat().st_mode | stat.S_IEXEC)
+            
     return str(binary)
 
 
