@@ -100,14 +100,20 @@ def install_from_release(root: Path) -> tuple[str, bool] | None:
         return None
     return binary, is_cuda
 
-
 def build_from_source(root: Path) -> str:
     source_dir = root / "llama.cpp"
     if not source_dir.exists():
         print(f"[setup] cloning {REPO_URL}")
         subprocess.run(["git", "clone", "--depth", "1", REPO_URL, str(source_dir)], check=True)
     use_cuda = shutil.which("nvcc") is not None
-    jobs = max((os.cpu_count() or 2) - 1, 1)
+    
+    # 【変更箇所】環境変数から指定があれば最優先、なければ利用可能な全CPUコアをフルに使い切る
+    env_jobs = os.environ.get("TSUZURI_BUILD_JOBS")
+    if env_jobs and env_jobs.isdigit():
+        jobs = int(env_jobs)
+    else:
+        jobs = os.cpu_count() or 2
+        
     print(f"[setup] building llama.cpp (GGML_CUDA={'ON' if use_cuda else 'OFF'}, -j{jobs}) ...")
     subprocess.run(
         ["cmake", "-S", str(source_dir), "-B", str(source_dir / "build"), f"-DGGML_CUDA={'ON' if use_cuda else 'OFF'}"],
@@ -125,6 +131,7 @@ def build_from_source(root: Path) -> str:
     if platform.system().lower() != "windows":
         binary.chmod(binary.stat().st_mode | stat.S_IEXEC)
     return str(binary)
+
 
 
 def ensure_llama_bin(install_root: str | Path | None = None) -> str:
