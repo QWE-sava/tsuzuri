@@ -12,7 +12,7 @@ import zipfile
 from pathlib import Path
 
 RELEASE_API = "https://github.com"
-REPO_URL = "https://github.com"
+LLAMA_REPO_URL = "https://github.com"
 
 _ASSET_KEYWORDS = {
     "linux": "ubuntu",
@@ -112,17 +112,14 @@ def install_from_release(root: Path) -> tuple[str, bool] | None:
     return binary, is_cuda
 
 
-
 def build_from_source(root: Path) -> str:
     source_dir = root / "llama.cpp"
     if not source_dir.exists():
-        print("[setup] cloning https://github.com")
-        # 【修正】定数 REPO_URL に頼らず、直接正しいURLを指定して暴走を防ぐ
-        subprocess.run(
-            ["git", "clone", "--depth", "1", "https://github.com", str(source_dir)], 
-            check=True
-        )
-    use_cuda = shutil.which("nvcc") is not None    
+        print(f"[setup] cloning {LLAMA_REPO_URL}")
+        # 変数バグを防ぐため、確定したURL定数を使用
+        subprocess.run(["git", "clone", "--depth", "1", LLAMA_REPO_URL, str(source_dir)], check=True)
+    use_cuda = shutil.which("nvcc") is not None
+    
     env_jobs = os.environ.get("TSUZURI_BUILD_JOBS")
     if env_jobs and env_jobs.isdigit():
         jobs = int(env_jobs)
@@ -131,7 +128,7 @@ def build_from_source(root: Path) -> str:
         
     print(f"[setup] building llama.cpp (GGML_CUDA={'ON' if use_cuda else 'OFF'}, -j{jobs}) via Ninja ...")
     
-    # CMakeの構成コマンド（Ninjaの採用、およびT4(75)以外の全アーキテクチャを力技で強制排除）
+    # 爆速ツールNinjaを採用し、T4 GPU(75)以外を完全強制排除
     subprocess.run(
         [
             "cmake", 
@@ -139,7 +136,7 @@ def build_from_source(root: Path) -> str:
             "-S", str(source_dir), 
             "-B", str(source_dir / "build"), 
             f"-DGGML_CUDA={'ON' if use_cuda else 'OFF'}",
-            "-DCMAKE_CUDA_ARCHITECTURES=75"  # T4 GPU専用にビルドをピンポイント固定
+            "-DCMAKE_CUDA_ARCHITECTURES=75"
         ],
         check=True,
     )
@@ -151,7 +148,7 @@ def build_from_source(root: Path) -> str:
     
     pattern = "llama-server.exe" if platform.system().lower() == "windows" else "llama-server"
     
-    # フォルダ（CMakeFiles/llama-server.dir）を完全に除外し、本物の実行ファイルだけを掴む
+    # 中間フォルダ（CMakeFiles/llama-server.dir）を完全に除外し、本物の実行ファイルだけを掴む
     hits = [
         p for p in glob.glob(str(source_dir / "build" / "**" / pattern), recursive=True)
         if Path(p).is_file()
@@ -209,3 +206,4 @@ def ensure_llama_bin(install_root: str | Path | None = None) -> str:
 
 if __name__ == "__main__":
     print(ensure_llama_bin())
+
