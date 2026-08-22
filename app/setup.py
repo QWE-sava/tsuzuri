@@ -22,6 +22,9 @@ _ASSET_KEYWORDS = {
 
 
 def _default_install_root() -> Path:
+    cache_env = os.environ.get("TSUZURI_LLAMA_CACHE")
+    if cache_env:
+        return Path(cache_env)
     if Path("/content").exists():
         return Path("/content/llama-bin")
     return Path.home() / ".tsuzuri" / "llama-bin"
@@ -131,8 +134,9 @@ def ensure_llama_bin(install_root: str | Path | None = None) -> str:
         return existing
 
     root = Path(install_root) if install_root else _default_install_root()
+    if find_existing() is None:
+        print("[setup] llama-server が見つからないため自動セットアップします（初回のみ。次回以降はキャッシュを使用）")
     root.mkdir(parents=True, exist_ok=True)
-    print("[setup] llama-server が見つからないため自動セットアップします")
 
     try:
         result = install_from_release(root)

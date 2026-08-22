@@ -52,7 +52,17 @@ REPO_URL = "https://github.com/QWE-sava/tsuzuri.git"
 ```
 
 `--auto-setup` が llama-server バイナリ（GitHubリリース取得、無ければソースビルド）と
-GGUFモデルを自動準備します。初回は数分〜10分程度かかります。
+GGUFモデルを自動準備します。モデルDLとバイナリ準備は並行して進みます。
+
+**セットアップ時間の目安**
+
+| 条件 | 時間 |
+|---|---|
+| 初回 | 約3〜10分 |
+| ノートブックで `USE_DRIVE_CACHE = True` にした2回目以降 | 約1〜2分 |
+
+Driveキャッシュは `tsuzuri-cache/llama-bin`（バイナリ）と `tsuzuri-cache/hf`（モデル）として保存され、
+環境変数 `TSUZURI_LLAMA_CACHE` / `TSUZURI_HF_CACHE` でも指定できます。
 
 ### ローカル（既存サーバーに接続）
 
